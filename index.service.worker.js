@@ -1,3 +1,4 @@
+// Karinderya online playtest
 // Karinderya offline pack
 // This service worker is required to expose an exported Godot project as a
 // Progressive Web App. It provides an offline fallback page telling the user
@@ -5,7 +6,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1795703307|7103973';
+const CACHE_VERSION = '1795703307|7103973|playtest-1';
 /** @type {string} */
 const CACHE_PREFIX = 'Karinderya Tycoo-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -18,15 +19,15 @@ const ENSURE_CROSSORIGIN_ISOLATION_HEADERS = false;
 const CACHED_FILES = ["index.html","index.js","index.offline.html","index.icon.png","index.apple-touch-icon.png","index.audio.worklet.js","index.audio.position.worklet.js"];
 // Files that we might not want the user to preload, and will only be cached on first load.
 /** @type {string[]} */
-const CACHEABLE_FILES = ["index.wasm","index.pck"];
+const CACHEABLE_FILES = ["index.wasm","karinderya-0.1.17.pck","play-0.1.17.html"];
 const FULL_CACHE = CACHED_FILES.concat(CACHEABLE_FILES);
 
 self.addEventListener('install', (event) => {
 	event.waitUntil(caches.open(CACHE_NAME).then((cache) => {
         // Finish caching the engine and game pack before marking this install ready.
         const appShell = ["index.manifest.json", "index.144x144.png", "index.180x180.png", "index.512x512.png"];
-        const requests = FULL_CACHE.concat(appShell).map((name) => new Request(name, { cache: 'force-cache' }));
-        return cache.addAll(requests);
+        const requests = FULL_CACHE.concat(appShell).map((name) => new Request(name, { cache: 'reload' }));
+        return cache.addAll(requests).then(() => self.skipWaiting());
     }));
 });
 
@@ -37,8 +38,8 @@ self.addEventListener('activate', (event) => {
 			return Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map((key) => caches.delete(key)));
 		}
 	).then(function () {
-		// Enable navigation preload if available.
-		return ('navigationPreload' in self.registration) ? self.registration.navigationPreload.enable() : Promise.resolve();
+		// Activate the installed release for open tabs without reloading them.
+		return self.clients.claim();
 	}));
 });
 
@@ -111,6 +112,15 @@ self.addEventListener(
 				// Try to use cache first
 				const cache = await caches.open(CACHE_NAME);
 				if (isNavigate) {
+					// Prefer the posted release when online. The offline copy is the fallback.
+					const path = new URL(url).pathname;
+					const scope = new URL(self.registration.scope).pathname;
+					if (path === scope || path === scope + CACHED_FILES[0] || path === scope + 'play-0.1.17.html') {
+						try {
+							const online = await self.fetch(event.request, {cache: 'reload'});
+							if (online.ok) return online;
+						} catch (_) { /* use the offline path below */ }
+					}
 					// Check if we have full cache during HTML page request.
 					/** @type {Response[]} */
 					const fullCache = await Promise.all(FULL_CACHE.map((name) => cache.match(name)));
