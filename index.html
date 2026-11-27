@@ -143,7 +143,7 @@ html.karinderya-mobile, .karinderya-mobile body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.wasm":38034280,"karinderya-0.1.30.pck":20791512},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js","mainPack":"karinderya-0.1.30.pck"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.wasm":38034280,"karinderya-0.1.31.pck":20798152},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js","mainPack":"karinderya-0.1.31.pck"};
 const GODOT_THREADS_ENABLED = false;
 (() => {
     const touchFirst = matchMedia('(pointer: coarse)').matches ||
@@ -153,7 +153,34 @@ const GODOT_THREADS_ENABLED = false;
 
     document.documentElement.classList.add('karinderya-mobile');
     const canvas = document.getElementById('canvas');
+    const page = document.documentElement;
     const visibleViewport = window.visualViewport;
+    const appMode = matchMedia('(display-mode: standalone), (display-mode: fullscreen)');
+
+    window.karinderyaCanFullscreen = () => !navigator.standalone && !appMode.matches &&
+        !document.fullscreenElement && !document.webkitFullscreenElement &&
+        ((document.fullscreenEnabled && typeof page.requestFullscreen === 'function') ||
+         (document.webkitFullscreenEnabled && typeof page.webkitRequestFullscreen === 'function'));
+    window.karinderyaRequestFullscreen = () => {
+        if (!window.karinderyaCanFullscreen()) return;
+        try {
+            const request = document.fullscreenEnabled && page.requestFullscreen
+                ? page.requestFullscreen({ navigationUI: 'hide' }) : page.webkitRequestFullscreen();
+            Promise.resolve(request).catch(() => {});
+        } catch (_) {
+            // Some embedded browsers allow the page to fill their viewport but deny fullscreen.
+        }
+    };
+
+    let triedFullscreen = false;
+    function fullscreenOnFirstTap(event) {
+        if (triedFullscreen || !event.isTrusted) return;
+        if (event.type === 'touchend' && (event.touches.length || event.changedTouches.length !== 1)) return;
+        triedFullscreen = true;
+        window.karinderyaRequestFullscreen();
+    }
+    canvas.addEventListener('touchend', fullscreenOnFirstTap, { passive: true });
+    canvas.addEventListener('click', fullscreenOnFirstTap);
 
     // Policy 0 lets us size the backing buffer to the visible canvas, including safe-area offsets.
     GODOT_CONFIG.canvasResizePolicy = 0;
@@ -170,6 +197,8 @@ const GODOT_THREADS_ENABLED = false;
 
     sizeCanvas();
     window.addEventListener('resize', sizeCanvas);
+    document.addEventListener('fullscreenchange', sizeCanvas);
+    document.addEventListener('webkitfullscreenchange', sizeCanvas);
     visibleViewport?.addEventListener('resize', sizeCanvas);
     if (typeof ResizeObserver === 'function') {
         new ResizeObserver(() => requestAnimationFrame(sizeCanvas)).observe(canvas);
